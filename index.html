@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Konekt Pro - Mapas Sinópticos Pro</title>
+    <style>
+        :root {
+            --primary: #0d9488;
+            --primary-dark: #0f766e;
+            --header-bg: #115e59;
+            --header-text: #ffffff;
+            --bg: #ccfbf1;
+            --card-bg: #ffffff;
+            --text: #134e4a;
+            --text-muted: #5eead4;
+            --border: #2dd4bf;
+            --success: #10b981;
+            --danger: #ef4444;
+            --gold: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; touch-action: manipulation; }
+        body { background-color: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; transition: background-color 0.3s, color 0.3s; }
+
+        header {
+            background: var(--header-bg);
+            color: var(--header-text);
+            border-bottom: 2px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            flex-wrap: wrap;
+            gap: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        }
+        .logo-area h1 { 
+            color: #ffffff; 
+            font-size: 1.5rem; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 15px currentColor;
+        }
+        .toolbar-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 7px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn:hover { background: var(--primary-dark); }
+        .btn-secondary { background: rgba(0,0,0,0.25); color: #fff; }
+        .btn-secondary:hover { background: rgba(0,0,0,0.4); }
+        .btn-danger { background: var(--danger); }
+
+        .tool-select, .tool-input {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid var(--border);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: auto;
+            min-height: 100vh;
+            background-color: var(--bg);
+            background-image: radial-gradient(rgba(0,0,0,0.15) 1.5px, transparent 1.5px);
+            background-size: 25px 25px;
+        }
+
+        #bg-image-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover;
+            background-position: center;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.3;
+        }
+
+        #bg-color-filter {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--bg);
+            opacity: 0.95;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #drawing-canvas {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+        #drawing-canvas.active-drawing {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        #svg-lines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        #elements-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* CUADROS DINÁMICOS */
+        .node-wrapper {
+            position: absolute;
+            pointer-events: auto;
+            z-index: 20;
+        }
+        .node-box {
+            min-width: 130px;
+            min-height: 38px;
+            background: #ffffff;
+            border: 2px solid var(--primary);
+            border-radius: 6px;
+            padding: 6px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        .node-wrapper.selected .node-box {
+            box-shadow: 0 0 0 3px var(--gold), 0 6px 15px rgba(0,0,0,0.2);
+            z-index: 25;
+        }
+
+        /* ESTRELLA DE MOVIMIENTO PARA CUADROS */
+        .node-drag-star {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.2rem;
+            cursor: grab;
+            z-index: 35;
+            user-select: none;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+            display: none;
+            background: white;
+            border-radius: 50%;
+            padding: 2px;
+        }
+        .node-wrapper.selected .node-drag-star { display: block; }
+        .node-drag-star:active { cursor: grabbing; }
+
+        .node-textarea {
+            background: transparent;
+            border: none;
+            color: inherit;
+            width: 100%;
+            min-width: 110px;
+            text-align: center;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            font-size: 0.88rem;
+            overflow: hidden;
+            pointer-events: auto;
+            z-index: 30;
+            cursor: text;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .node-img-preview {
+            max-width: 30px;
+            max-height: 30px;
+            object-fit: contain;
+            border-radius: 3px;
+            margin-bottom: 4px;
+            display: inline-block;
+        }
+
+        /* CONTROLES FLOTANTES */
+        .element-controls {
+            position: absolute;
+            top: -32px;
+            right: 0;
+            background: #0f172a;
+            color: #fff;
+            padding: 3px 8px;
+            border-radius: 6px;
+            display: none;
+            gap: 6px;
+            align-items: center;
+            font-size: 0.75rem;
+            z-index: 40;
+            white-space: nowrap;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .node-wrapper.selected .element-controls, .sticky-note.selected .element-controls, .sticker-wrapper.selected .element-controls { display: flex; }
+        .element-controls button, .element-controls span {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+        .element-controls button:hover, .element-controls span:hover { background: rgba(255,255,255,0.2); }
+
+        /* PUNTOS DE CONEXIÓN */
+        .connector-dot {
+            position: absolute;
+            width: 8px; height: 8px;
+            background: var(--gold);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            cursor: crosshair;
+            z-index: 35;
+            display: none;
+        }
+        .node-wrapper.selected .connector-dot { display: block; }
+        .dot-top { top: -4px; left: 50%; transform: translateX(-50%); }
+        .dot-bottom { bottom: -4px; left: 50%; transform: translateX(-50%); }
+        .dot-left { left: -4px; top: 50%; transform: translateY(-50%); }
+        .dot-right { right: -4px; top: 50%; transform: translateY(-50%); }
+
+        .resize-handle-corner {
+            position: absolute;
+            width: 8px; height: 8px;
+            bottom: -3px; right: -3px;
+            background: var(--primary);
+            border-radius: 2px;
+            cursor: se-resize;
+            display: none;
+            z-index: 32;
+        }
+        .node-wrapper.selected .resize-handle-corner { display: block; }
+
+        /* STICKERS CON ESTRELLA AL LADO DEL CANDADO */
+        .sticker-wrapper {
+            position: absolute;
+            pointer-events: auto;
+            cursor: move;
+            user-select: none;
+            z-index: 15;
+        }
+        .sticker-item {
+            font-size: 2.5rem;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+        }
+
+        /* NOTAS */
+        .sticky-note {
+            position: absolute;
+            width: 160px;
+            min-height: 100px;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+            pointer-events: auto;
+            cursor: move;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 15;
+        }
+        .sticky-note.selected {
+            box-shadow: 0 0 0 3px var(--gold), 0 8px 20px rgba(0,0,0,0.25);
+            z-index: 25;
+        }
+        .sticky-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-weight: bold;
+            opacity: 0.7;
+        }
+        .sticky-textarea {
+            background: transparent;
+            border: none;
+            width: 100%;
+            height: 65px;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            font-size: 0.85rem;
+            color: inherit;
+            pointer-events: auto;
+            z-index: 20;
+        }
+
+        /* INSPECTOR */
+        #inspector-panel {
+            position: absolute;
+            top: 75px;
+            right: 20px;
+            width: 290px;
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 15px;
+            z-index: 100;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            display: none;
+        }
+        #inspector-panel h3 { font-size: 1rem; color: var(--primary); margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+        .inspector-row { margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; }
+
+        /* MODALES */
+        .modal-box {
+            position: fixed;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid var(--border);
+            padding: 25px;
+            border-radius: 12px;
+            z-index: 2000;
+            width: 480px;
+            box-shadow: 0 20px 25px rgba(0,0,0,0.25);
+            display: none;
+        }
+        .stickers-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            max-height: 320px;
+            overflow-y: auto;
+            margin-top: 10px;
+            padding: 5px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .sticker-option {
+            font-size: 1.8rem;
+            text-align: center;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px;
+            transition: transform 0.1s, background 0.1s;
+        }
+        .sticker-option:hover { background: #e2e8f0; transform: scale(1.15); }
+
+        .theme-selector-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .theme-btn {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(0,0,0,0.15);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-align: center;
+        }
+    </style>
+</head>
+<body onclick="handleGlobalClick(event)">
+
+    <header onclick="event.stopPropagation()">
+        <div class="logo-area">
+            <h1>🧠 Konekt Pro</h1>
+        </div>
+        <div class="toolbar-group">
+            <button class="btn" onclick="addNode()">➕ Cuadro</button>
+            <button class="btn btn-secondary" onclick="addStickyNote()">📌 Nota</button>
+            <button class="btn btn-secondary" onclick="openStickersModal()">✨ Stickers (150+)</button>
+            <button class="btn btn-secondary" onclick="toggleDrawingMode()" id="draw-mode-btn">✏️ Lapicero</button>
+            <button class="btn btn-secondary" onclick="openBgSettings()">🎨 Temas y Fondo</button>
+            <button class="btn btn-secondary" onclick="undoAction()" title="Deshacer (Ctrl+Z)">↩️</button>
+            <button class="btn btn-secondary" onclick="redoAction()" title="Rehacer (Ctrl+Y)">↪️</button>
+            <button class="btn btn-secondary" onclick="exportToImage()">💾 PNG</button>
+            <button class="btn btn-danger" onclick="clearCanvas()">🗑️</button>
+        </div>
+    </header>
+
+    <!-- BARRA FLOTANTE DE LÁPIZ -->
+    <div id="drawing-toolbar" style="position: absolute; top: 75px; left: 20px; background: white; border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; z-index: 1000; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1); align-items: center; gap: 10px;" onclick="event.stopPropagation()">
+        <span style="font-size: 0.8rem; font-weight: bold;">Herramienta:</span>
+        <select id="draw-tool" class="tool-select">
+            <option value="pen">Lápiz</option>
+            <option value="eraser">Borrador</option>
+        </select>
+        <label style="font-size:0.75rem;">Color:</label>
+        <input type="color" id="pen-color" value="#0d9488" style="width:30px; height:25px; border:none; cursor:pointer;">
+        <label style="font-size:0.75rem;">Grosor:</label>
+        <input type="range" id="pen-size" min="1" max="25" value="3" style="width: 70px;" title="Grosor">
+        <button class="btn btn-danger" style="padding: 3px 8px; font-size: 0.75rem;" onclick="clearDrawingCanvas()">Limpiar Trazos</button>
+    </div>
+
+    <!-- CONTENEDOR DEL LIENZO -->
+    <div id="canvas-container" onclick="handleCanvasClick(event)">
+        <div id="bg-image-layer"></div>
+        <div id="bg-color-filter"></div>
+        <canvas id="drawing-canvas"></canvas>
+        <svg id="svg-lines"></svg>
+        <div id="elements-layer"></div>
+    </div>
+
+    <!-- INSPECTOR DE PROPIEDADES -->
+    <div id="inspector-panel" onclick="event.stopPropagation()">
+        <h3>🎨 Propiedades del Cuadro</h3>
+        <div class="inspector-row">
+            <label style="font-weight: bold;">Derivar Cuadro:</label>
+            <div style="display:flex; gap:6px;">
+                <button class="btn" style="flex:1; justify-content: center; background: var(--gold); color: #000; font-size:0.75rem;" onclick="promptDeriveNode('synoptic')">T Inversa</button>
+                <button class="btn" style="flex:1; justify-content: center; background: var(--primary); font-size:0.75rem;" onclick="promptDeriveNode('straight')">Recta</button>
+                <button class="btn" style="flex:1; justify-content: center; background: #6366f1; font-size:0.75rem;" onclick="promptDeriveNode('diagonal')">Diagonal</button>
+            </div>
+        </div>
+        <div class="inspector-row" style="margin-top:8px;">
+            <button class="btn" style="width:100%; justify-content:center; background: var(--success); font-weight:bold;" onclick="focusSelectedNodeText()">✏️ Corregir Texto</button>
+        </div>
+        <div class="inspector-row" style="display:flex; flex-direction:row; gap:10px; margin-top:4px;">
+            <div style="flex:1;">
+                <label>Borde:</label>
+                <input type="color" id="insp-border-color" onchange="updateSelectedNodeStyle()" style="width:100%;">
+            </div>
+            <div style="flex:1;">
+                <label>Grosor (<span id="val-border-width">2.5</span>px):</label>
+                <input type="range" id="insp-border-width" min="1" max="10" value="2.5" oninput="updateSelectedNodeStyle()" style="width:100%;">
+            </div>
+        </div>
+        <div class="inspector-row" style="display:flex; flex-direction:row; gap:10px;">
+            <div style="flex:1;">
+                <label>Fondo:</label>
+                <input type="color" id="insp-bg-color" value="#ffffff" onchange="updateSelectedNodeStyle()" style="width:100%;">
+            </div>
+            <div style="flex:1;">
+                <label>Texto:</label>
+                <input type="color" id="insp-text-color" value="#134e4a" onchange="updateSelectedNodeStyle()" style="width:100%;">
+            </div>
+        </div>
+        <div class="inspector-row">
+            <label>Tamaño Fuente (<span id="val-font-size">14</span>px):</label>
+            <input type="range" id="insp-font-size" min="10" max="30" value="14" oninput="updateSelectedNodeStyle()">
+        </div>
+        <div class="inspector-row" style="flex-direction: row; gap: 8px; align-items: center;">
+            <label>Estilo:</label>
+            <button class="btn btn-secondary" style="padding:4px 8px; font-size:0.75rem;" onclick="toggleNodeBold()"><b>B</b></button>
+            <select id="insp-align" class="tool-select" onchange="updateSelectedNodeStyle()">
+                <option value="left">Izquierda</option>
+                <option value="center" selected>Centro</option>
+                <option value="right">Derecha</option>
+            </select>
+        </div>
+        <div class="inspector-row">
+            <label>Imagen en Cuadro:</label>
+            <input type="file" accept="image/*" class="tool-input" onchange="addImgToSelectedNode(event)">
+        </div>
+        <button class="btn btn-danger" style="width:100%; margin-top:8px;" onclick="deleteSelectedNode()">🗑️ Eliminar Cuadro</button>
+    </div>
+
+    <!-- MODAL DE TEMAS Y FONDO -->
+    <div id="bg-settings-modal" class="modal-box" onclick="event.stopPropagation()">
+        <h3 style="color: var(--primary); margin-bottom: 10px;">Temas e Imagen de Fondo</h3>
+        
+        <div class="inspector-row">
+            <label style="font-weight: bold; margin-bottom: 4px;">Elige tu tema favorito:</label>
+            <div class="theme-selector-grid">
+                <button class="theme-btn" style="background:#ccfbf1; color:#134e4a;" onclick="setPageTheme('#ccfbf1', '#99f6e4', '#115e59', '#ffffff')">Menta Pro</button>
+                <button class="theme-btn" style="background:#ffe4e6; color:#be123c;" onclick="setPageTheme('#ffe4e6', '#fecdd3', '#881337', '#ffffff')">Rosado Vivo</button>
+                <button class="theme-btn" style="background:#e0f2fe; color:#0369a1;" onclick="setPageTheme('#e0f2fe', '#bae6fd', '#075985', '#ffffff')">Azul Cielo</button>
+                <button class="theme-btn" style="background:#1e3a8a; color:#ffffff;" onclick="setPageTheme('#1e3a8a', '#3b82f6', '#172554', '#ffffff')">Azul Noche</button>
+                <button class="theme-btn" style="background:#0f172a; color:#f8fafc;" onclick="setPageTheme('#0f172a', '#334155', '#020617', '#ffffff')">Negro Real</button>
+                <button class="theme-btn" style="background:#2e1065; color:#f3e8ff;" onclick="setPageTheme('#2e1065', '#7c3aed', '#1e1b4b', '#ffffff')">Morado Mágico</button>
+                <button class="theme-btn" style="background:#fee2e2; color:#991b1b;" onclick="setPageTheme('#fee2e2', '#fca5a5', '#7f1d1d', '#ffffff')">Rojo Fuego</button>
+                <button class="theme-btn" style="background:#dcfce7; color:#166534;" onclick="setPageTheme('#dcfce7', '#86efac', '#14532d', '#ffffff')">Verde Selva</button>
+                <button class="theme-btn" style="background:#fef9c3; color:#854d0e;" onclick="setPageTheme('#fef9c3', '#fde047', '#713f12', '#ffffff')">Amarillo Oro</button>
+                <button class="theme-btn" style="background:#ffedd5; color:#9a3412;" onclick="setPageTheme('#ffedd5', '#fdba74', '#7c2d12', '#ffffff')">Naranja Cálido</button>
+                <button class="theme-btn" style="background:#f5efe6; color:#44403c;" onclick="setPageTheme('#f5efe6', '#d7ccc8', '#292524', '#ffffff')">Café Crema</button>
+                <button class="theme-btn" style="background:#f1f5f9; color:#475569;" onclick="setPageTheme('#f1f5f9', '#cbd5e1', '#334155', '#ffffff')">Gris Moderno</button>
+            </div>
+        </div>
+
+        <div class="inspector-row" style="margin-top: 15px;">
+            <label>Subir imagen de fondo:</label>
+            <div style="display:flex; gap:8px;">
+                <input type="file" accept="image/*" class="tool-input" style="flex:1;" onchange="setCanvasBackground(event)">
+                <button class="btn btn-danger" style="padding:4px 10px; font-size:0.75rem;" onclick="removeCanvasBackground()">Quitar Foto</button>
+            </div>
+        </div>
+        <div class="inspector-row">
+            <label>Intensidad del color de hoja (<span id="val-bg-whiteness">95</span>%):</label>
+            <input type="range" id="insp-bg-whiteness" min="50" max="100" value="95" oninput="updateBgWhiteness(this.value)">
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:15px;">
+            <button class="btn" onclick="closeModal('bg-settings-modal')">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- MODAL DE STICKERS -->
+    <div id="stickers-modal" class="modal-box" onclick="event.stopPropagation()">
+        <h3 style="color: var(--primary); margin-bottom: 5px;">✨ Mega Colección de Stickers (150+)</h3>
+        <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 8px;">Haz clic en cualquier sticker para agregarlo al lienzo:</p>
+        <div class="stickers-grid" id="stickers-container"></div>
+        <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+            <button class="btn" onclick="closeModal('stickers-modal')">Cerrar</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script>
+        let nodes = JSON.parse(localStorage.getItem('konekt_nodes')) || [];
+        let stickyNotes = JSON.parse(localStorage.getItem('konekt_stickies')) || [];
+        let connections = JSON.parse(localStorage.getItem('konekt_conns')) || [];
+        let stickers = JSON.parse(localStorage.getItem('konekt_stickers')) || [];
+        let bgImgData = localStorage.getItem('konekt_bg') || '';
+        let bgWhitenessVal = localStorage.getItem('konekt_bg_white') || 0.95;
+        let pageBgColor = localStorage.getItem('konekt_page_bg') || '#ccfbf1';
+        let pageDotColor = localStorage.getItem('konekt_page_dot') || '#99f6e4';
+        let headerBgColor = localStorage.getItem('konekt_header_bg') || '#115e59';
+        let headerTextColor = localStorage.getItem('konekt_header_text') || '#ffffff';
+
+        applyThemeStyles(pageBgColor, pageDotColor, headerBgColor, headerTextColor);
+
+        let drawingCanvas = document.getElementById('drawing-canvas');
+        let ctxDraw = drawingCanvas.getContext('2d');
+
+        let savedDrawing = localStorage.getItem('konekt_drawing');
+        if(savedDrawing) {
+            let img = new Image();
+            img.onload = function() { ctxDraw.drawImage(img, 0, 0); }
+            img.src = savedDrawing;
+        }
+
+        let historyStack = [];
+        let redoStack = [];
+
+        function captureFullState() {
+            return JSON.stringify({
+                nodes,
+                stickyNotes,
+                connections,
+                stickers,
+                drawing: drawingCanvas.toDataURL()
+            });
+        }
+
+        function saveStateToHistory() {
+            let currentState = captureFullState();
+            historyStack.push(currentState);
+            if(historyStack.length > 40) historyStack.shift();
+            redoStack = [];
+            saveAll();
+        }
+
+        function undoAction() {
+            if(historyStack.length === 0) return;
+            let currentState = captureFullState();
+            redoStack.push(currentState);
+            let prevState = JSON.parse(historyStack.pop());
+            restoreState(prevState);
+        }
+
+        function redoAction() {
+            if(redoStack.length === 0) return;
+            let currentState = captureFullState();
+            historyStack.push(currentState);
+            let nextState = JSON.parse(redoStack.pop());
+            restoreState(nextState);
+        }
+
+        function restoreState(stateObj) {
+            nodes = stateObj.nodes;
+            stickyNotes = stateObj.stickyNotes;
+            connections = stateObj.connections;
+            stickers = stateObj.stickers;
+            
+            ctxDraw.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            if(stateObj.drawing) {
+                let img = new Image();
+                img.onload = function() {
+                    ctxDraw.drawImage(img, 0, 0);
+                    renderCanvas();
+                }
+                img.src = stateObj.drawing;
+            } else {
+                renderCanvas();
+            }
+            saveAll();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if(e.ctrlKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                undoAction();
+            } else if(e.ctrlKey && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                redoAction();
+            }
+        });
+
+        let selectedNodeId = null;
+        let selectedStickyId = null;
+        let selectedStickerId = null;
+        let connectingFrom = null;
+        let isDrawingMode = false;
+
+        const container = document.getElementById('elements-layer');
+        const svgLines = document.getElementById('svg-lines');
+
+        function resizeDrawingCanvas() {
+            let tempCanvas = document.createElement('canvas');
+            let tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = drawingCanvas.width;
+            tempCanvas.height = drawingCanvas.height;
+            tempCtx.drawImage(drawingCanvas, 0, 0);
+
+            drawingCanvas.width = window.innerWidth;
+            drawingCanvas.height = window.innerHeight;
+            ctxDraw.drawImage(tempCanvas, 0, 0);
+        }
+        window.onresize = resizeDrawingCanvas;
+        resizeDrawingCanvas();
+
+        if(bgImgData) {
+            document.getElementById('bg-image-layer').style.backgroundImage = `url(${bgImgData})`;
+            document.getElementById('bg-color-filter').style.opacity = bgWhitenessVal;
+            document.getElementById('insp-bg-whiteness').value = bgWhitenessVal * 100;
+            document.getElementById('val-bg-whiteness').innerText = Math.round(bgWhitenessVal * 100);
+        }
+
+        function saveAll() {
+            localStorage.setItem('konekt_nodes', JSON.stringify(nodes));
+            localStorage.setItem('konekt_stickies', JSON.stringify(stickyNotes));
+            localStorage.setItem('konekt_conns', JSON.stringify(connections));
+            localStorage.setItem('konekt_stickers', JSON.stringify(stickers));
+            localStorage.setItem('konekt_drawing', drawingCanvas.toDataURL());
+            localStorage.setItem('konekt_page_bg', pageBgColor);
+            localStorage.setItem('konekt_page_dot', pageDotColor);
+            localStorage.setItem('konekt_header_bg', headerBgColor);
+            localStorage.setItem('konekt_header_text', headerTextColor);
+        }
+
+        function handleGlobalClick(e) {
+            selectedStickerId = null;
+            selectedStickyId = null;
+            renderCanvas();
+        }
+
+        function handleCanvasClick(e) {
+            selectedNodeId = null;
+            selectedStickyId = null;
+            selectedStickerId = null;
+            document.getElementById('inspector-panel').style.display = 'none';
+            renderCanvas();
+        }
+
+        function setPageTheme(bg, dot, hBg, hText) {
+            pageBgColor = bg;
+            pageDotColor = dot;
+            headerBgColor = hBg;
+            headerTextColor = hText;
+            applyThemeStyles(bg, dot, hBg, hText);
+            saveStateToHistory();
+        }
+
+        function applyThemeStyles(bg, dot, hBg, hText) {
+            document.documentElement.style.setProperty('--bg', bg);
+            document.documentElement.style.setProperty('--header-bg', hBg);
+            document.documentElement.style.setProperty('--header-text', hText);
+            let canvasContainer = document.getElementById('canvas-container');
+            if(canvasContainer) {
+                canvasContainer.style.backgroundColor = bg;
+                canvasContainer.style.backgroundImage = `radial-gradient(${dot} 1.5px, transparent 1.5px)`;
+            }
+            let filter = document.getElementById('bg-color-filter');
+            if(filter) {
+                filter.style.backgroundColor = bg;
+            }
+        }
+
+        // --- CREAR NODOS ---
+        function addNode(customX, customY, customText = '') {
+            saveStateToHistory();
+            let newId = 'node_' + Date.now();
+            let newNode = {
+                id: newId,
+                x: customX || (100 + (nodes.length * 30) % 300),
+                y: customY || (100 + (nodes.length * 30) % 200),
+                text: customText,
+                borderColor: '#0d9488',
+                borderWidth: 2.5,
+                bgColor: '#ffffff',
+                textColor: '#134e4a',
+                fontSize: 14,
+                fontWeight: 'normal',
+                textAlign: 'center',
+                imgUrl: '',
+                locked: false
+            };
+            nodes.push(newNode);
+            renderCanvas();
+            selectNode(newId);
+            setTimeout(() => {
+                let box = document.querySelector(`[data-id="${newId}"] textarea`);
+                if(box) { 
+                    box.focus(); 
+                    box.selectionStart = box.selectionEnd = box.value.length; 
+                }
+            }, 60);
+        }
+
+        function renderCanvas() {
+            container.innerHTML = '';
+
+            nodes.forEach(n => {
+                let wrapper = document.createElement('div');
+                wrapper.className = `node-wrapper ${selectedNodeId === n.id ? 'selected' : ''}`;
+                wrapper.setAttribute('data-id', n.id);
+                wrapper.style.left = n.x + 'px';
+                wrapper.style.top = n.y + 'px';
+
+                wrapper.innerHTML = `
+                    <div class="node-drag-star" title="Arrastra para mover" ${n.locked ? 'style="display:none;"' : ''} onmousedown="startDraggingNode(event, '${n.id}')" ontouchstart="startDraggingNode(event, '${n.id}')">⭐</div>
+                    <div class="element-controls" onclick="event.stopPropagation()">
+                        <span title="Estado" style="cursor:pointer;" onclick="toggleNodeLock('${n.id}')">${n.locked ? '🔒' : '🔓'}</span>
+                        <button onclick="deleteNodeDirect('${n.id}')" title="Eliminar" style="color:#ef4444; font-weight:bold;">✕</button>
+                    </div>
+                    <div class="node-box" style="border-color: ${n.borderColor}; border-width: ${n.borderWidth}px; background-color: ${n.bgColor}; color: ${n.textColor};">
+                        <img src="${n.imgUrl}" class="node-img-preview" style="display: ${n.imgUrl ? 'inline-block' : 'none'};">
+                        <textarea class="node-textarea" ${n.locked ? 'readonly' : ''} style="color: ${n.textColor}; font-size: ${n.fontSize}px; font-weight: ${n.fontWeight}; text-align: ${n.textAlign};" oninput="autoGrowNode(this, '${n.id}')" onclick="event.stopPropagation(); selectNode('${n.id}')">${n.text}</textarea>
+                        
+                        <div class="connector-dot dot-top" onclick="event.stopPropagation(); startConnection(event, '${n.id}', 'top')"></div>
+                        <div class="connector-dot dot-bottom" onclick="event.stopPropagation(); startConnection(event, '${n.id}', 'bottom')"></div>
+                        <div class="connector-dot dot-left" onclick="event.stopPropagation(); startConnection(event, '${n.id}', 'left')"></div>
+                        <div class="connector-dot dot-right" onclick="event.stopPropagation(); startConnection(event, '${n.id}', 'right')"></div>
+                        
+                        <div class="resize-handle-corner" onmousedown="startResizingNode(event, '${n.id}')"></div>
+                    </div>
+                `;
+
+                let ta = wrapper.querySelector('textarea');
+                if(ta) {
+                    setTimeout(() => {
+                        ta.style.height = 'auto';
+                        ta.style.height = ta.scrollHeight + 'px';
+                    }, 0);
+                }
+
+                wrapper.onclick = (e) => { 
+                    e.stopPropagation(); 
+                    selectNode(n.id);
+                    if(ta && !n.locked) ta.focus();
+                };
+                container.appendChild(wrapper);
+            });
+
+            stickyNotes.forEach(s => {
+                let note = document.createElement('div');
+                note.className = `sticky-note ${selectedStickyId === s.id ? 'selected' : ''}`;
+                note.style.left = s.x + 'px';
+                note.style.top = s.y + 'px';
+                note.style.backgroundColor = s.bgColor;
+                note.style.color = s.textColor;
+
+                note.innerHTML = `
+                    <div class="element-controls" onclick="event.stopPropagation()">
+                        <span title="Estado" style="cursor:pointer;" onclick="toggleStickyLock('${s.id}')">${s.locked ? '🔒' : '🔓'}</span>
+                        <button onclick="deleteSticky('${s.id}')" title="Eliminar" style="color:#ef4444; font-weight:bold;">✕</button>
+                    </div>
+                    <div class="sticky-header">
+                        <span>📌 Nota</span>
+                    </div>
+                    <textarea class="sticky-textarea" ${s.locked ? 'readonly' : ''} oninput="updateStickyText('${s.id}', this.value)">${s.text}</textarea>
+                `;
+
+                note.onmousedown = (e) => {
+                    if(!s.locked && e.target.tagName !== 'TEXTAREA') {
+                        startDraggingSticky(e, s.id);
+                    }
+                };
+                note.ontouchstart = (e) => {
+                    if(!s.locked && e.target.tagName !== 'TEXTAREA') {
+                        startDraggingSticky(e, s.id);
+                    }
+                };
+                note.onclick = (e) => {
+                    e.stopPropagation();
+                    selectedStickyId = s.id;
+                    selectedNodeId = null;
+                    selectedStickerId = null;
+                    document.getElementById('inspector-panel').style.display = 'none';
+                    renderCanvas();
+                };
+
+                container.appendChild(note);
+            });
+
+            stickers.forEach(st => {
+                let stEl = document.createElement('div');
+                stEl.className = `sticker-wrapper ${selectedStickerId === st.id ? 'selected' : ''}`;
+                stEl.style.left = st.x + 'px';
+                stEl.style.top = st.y + 'px';
+
+                stEl.innerHTML = `
+                    <div class="element-controls" onclick="event.stopPropagation()">
+                        <span title="Mover" style="cursor:grab;" ${st.locked ? 'style="display:none;"' : ''} onmousedown="startDraggingSticker(event, '${st.id}')" ontouchstart="startDraggingSticker(event, '${st.id}')">⭐</span>
+                        <span title="Estado" style="cursor:pointer;" onclick="toggleStickerLock('${st.id}')">${st.locked ? '🔒' : '🔓'}</span>
+                        <button onclick="scaleSticker('${st.id}', 1.2)" title="Agrandar">➕</button>
+                        <button onclick="scaleSticker('${st.id}', 0.8)" title="Encoger">➖</button>
+                        <button onclick="deleteSticker('${st.id}')" title="Eliminar" style="color:#ef4444; font-weight:bold;">✕</button>
+                    </div>
+                    <div class="sticker-item" style="font-size: ${st.size || 2.5}rem;">${st.emoji}</div>
+                `;
+
+                stEl.onclick = (e) => {
+                    e.stopPropagation();
+                    selectedStickerId = st.id;
+                    selectedNodeId = null;
+                    selectedStickyId = null;
+                    document.getElementById('inspector-panel').style.display = 'none';
+                    renderCanvas();
+                };
+
+                container.appendChild(stEl);
+            });
+
+            renderLines();
+        }
+
+        // --- AUTO-CRECIMIENTO DINÁMICO ---
+        function autoGrowNode(ta, id) {
+            let n = nodes.find(node => node.id === id);
+            if(n) {
+                n.text = ta.value;
+                ta.style.height = 'auto';
+                ta.style.height = ta.scrollHeight + 'px';
+                saveAll();
+            }
+        }
+
+        function focusSelectedNodeText() {
+            if(!selectedNodeId) return;
+            let n = nodes.find(node => node.id === selectedNodeId);
+            if(n && n.locked) return;
+            let box = document.querySelector(`[data-id="${selectedNodeId}"] textarea`);
+            if(box) {
+                box.focus();
+                box.selectionStart = box.selectionEnd = box.value.length;
+            }
+        }
+
+        function toggleNodeLock(id) {
+            let n = nodes.find(node => node.id === id);
+            if(n) {
+                n.locked = !n.locked;
+                renderCanvas();
+            }
+        }
+
+        function toggleStickyLock(id) {
+            let s = stickyNotes.find(note => note.id === id);
+            if(s) {
+                s.locked = !s.locked;
+                renderCanvas();
+            }
+        }
+
+        // --- CONEXIONES INTELIGENTES ---
+        function startConnection(e, nodeId, anchor) {
+            if(!connectingFrom) {
+                connectingFrom = { nodeId, anchor };
+                alert("🔗 Conector seleccionado. Haz clic en el punto de otro cuadro para unirlos.");
+            } else {
+                if(connectingFrom.nodeId !== nodeId) {
+                    saveStateToHistory();
+                    connections.push({ from: connectingFrom, to: { nodeId, anchor }, type: connectingFrom.lineType || 'synoptic' });
+                    renderCanvas();
+                }
+                connectingFrom = null;
+            }
+        }
+
+        function renderLines() {
+            svgLines.innerHTML = '';
+            connections.forEach((c, idx) => {
+                let nodeA = nodes.find(n => n.id === c.from.nodeId);
+                let nodeB = nodes.find(n => n.id === c.to.nodeId);
+                if(!nodeA || !nodeB) return;
+
+                let elA = document.querySelector(`[data-id="${c.from.nodeId}"] .node-box`);
+                let elB = document.querySelector(`[data-id="${c.to.nodeId}"] .node-box`);
+                
+                let hA = elA ? elA.offsetHeight : 38;
+                let hB = elB ? elB.offsetHeight : 38;
+                let wA = elA ? elA.offsetWidth : 130;
+                let wB = elB ? elB.offsetWidth : 130;
+                let pathData = '';
+
+                if(c.type === 'straight') {
+                    let centerAY = nodeA.y + hA / 2;
+                    let centerBY = nodeB.y + hB / 2;
+                    let ptA, ptB;
+
+                    if (nodeB.x > nodeA.x + wA) {
+                        if (Math.abs(centerBY - centerAY) < 15) {
+                            ptA = { x: nodeA.x + wA, y: centerAY };
+                            ptB = { x: nodeB.x, y: centerBY };
+                        } else if (centerBY > centerAY) {
+                            ptA = { x: nodeA.x + wA, y: centerAY };
+                            ptB = { x: nodeB.x, y: nodeB.y };
+                        } else {
+                            ptA = { x: nodeA.x + wA, y: centerAY };
+                            ptB = { x: nodeB.x, y: nodeB.y + hB };
+                        }
+                    } else {
+                        ptA = { x: nodeA.x + wA / 2, y: centerBY > centerAY ? nodeA.y + hA : nodeA.y };
+                        ptB = { x: nodeB.x + wB / 2, y: centerBY > centerAY ? nodeB.y : nodeB.y + hB };
+                    }
+                    pathData = `M ${ptA.x} ${ptA.y} L ${ptB.x} ${ptB.y}`;
+
+                } else if(c.type === 'diagonal') {
+                    let ptA = { x: nodeA.x + wA / 2, y: nodeA.y + hA / 2 };
+                    let ptB = { x: nodeB.x + wB / 2, y: nodeB.y + hB / 2 };
+                    let dx = (ptB.x - ptA.x) * 0.5;
+                    pathData = `M ${ptA.x} ${ptA.y} Q ${ptA.x + dx} ${ptA.y}, ${ptB.x} ${ptB.y}`;
+
+                } else {
+                    let ptA = { x: nodeA.x + wA / 2, y: nodeA.y + hA };
+                    let ptB = { x: nodeB.x + wB / 2, y: nodeB.y };
+                    let midY = ptA.y + (ptB.y - ptA.y) / 2;
+                    pathData = `M ${ptA.x} ${ptA.y} L ${ptA.x} ${midY} L ${ptB.x} ${midY} L ${ptB.x} ${ptB.y}`;
+                }
+
+                let g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                let path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('stroke', '#0d9488');
+                path.setAttribute('stroke-width', '2.5');
+                path.setAttribute('fill', 'none');
+                path.style.cursor = 'pointer';
+                path.onclick = () => {
+                    if(confirm("¿Eliminar esta línea?")) {
+                        saveStateToHistory();
+                        connections.splice(idx, 1);
+                        renderCanvas();
+                    }
+                };
+
+                g.appendChild(path);
+                svgLines.appendChild(g);
+            });
+        }
+
+        // --- ARRASTRE MULTIPLATAFORMA ---
+        function getClientCoords(e) {
+            if (e.touches && e.touches.length > 0) {
+                return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+            }
+            return { clientX: e.clientX, clientY: e.clientY };
+        }
+
+        function startDraggingNode(e, id) {
+            e.stopPropagation();
+            e.preventDefault();
+            saveStateToHistory();
+            let node = nodes.find(n => n.id === id);
+            let coords = getClientCoords(e);
+            let startX = coords.clientX - node.x;
+            let startY = coords.clientY - node.y;
+
+            function onMove(ev) {
+                let c = getClientCoords(ev);
+                node.x = c.clientX - startX;
+                node.y = c.clientY - startY;
+                renderCanvas();
+            }
+            function onEnd() {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onMove);
+                window.removeEventListener('touchend', onEnd);
+            }
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+        }
+
+        function startResizingNode(e, id) {
+            e.stopPropagation();
+            saveStateToHistory();
+            let node = nodes.find(n => n.id === id);
+            let startW = node.width || 130;
+            let startX = getClientCoords(e).clientX;
+
+            function onMove(ev) {
+                let c = getClientCoords(ev);
+                node.width = Math.max(100, startW + (c.clientX - startX));
+                renderCanvas();
+            }
+            function onEnd() {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onMove);
+                window.removeEventListener('touchend', onEnd);
+            }
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+        }
+
+        function startDraggingSticky(e, id) {
+            e.stopPropagation();
+            saveStateToHistory();
+            let s = stickyNotes.find(note => note.id === id);
+            let coords = getClientCoords(e);
+            let startX = coords.clientX - s.x;
+            let startY = coords.clientY - s.y;
+
+            function onMove(ev) {
+                let c = getClientCoords(ev);
+                s.x = c.clientX - startX;
+                s.y = c.clientY - startY;
+                renderCanvas();
+            }
+            function onEnd() {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onMove);
+                window.removeEventListener('touchend', onEnd);
+            }
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+        }
+
+        function startDraggingSticker(e, id) {
+            e.stopPropagation();
+            e.preventDefault();
+            saveStateToHistory();
+            let st = stickers.find(s => s.id === id);
+            let coords = getClientCoords(e);
+            let startX = coords.clientX - st.x;
+            let startY = coords.clientY - st.y;
+
+            function onMove(ev) {
+                let c = getClientCoords(ev);
+                st.x = c.clientX - startX;
+                st.y = c.clientY - startY;
+                renderCanvas();
+            }
+            function onEnd() {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onMove);
+                window.removeEventListener('touchend', onEnd);
+            }
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+        }
+
+        // --- INSPECTOR Y SELECCIÓN ---
+        function selectNode(id) {
+            selectedNodeId = id;
+            selectedStickyId = null;
+            selectedStickerId = null;
+            let n = nodes.find(node => node.id === id);
+            let panel = document.getElementById('inspector-panel');
+            if(n) {
+                panel.style.display = 'block';
+                document.getElementById('insp-border-color').value = n.borderColor;
+                document.getElementById('insp-border-width').value = n.borderWidth;
+                document.getElementById('val-border-width').innerText = n.borderWidth;
+                document.getElementById('insp-bg-color').value = n.bgColor;
+                document.getElementById('insp-text-color').value = n.textColor;
+                document.getElementById('insp-font-size').value = n.fontSize;
+                document.getElementById('val-font-size').innerText = n.fontSize;
+                document.getElementById('insp-align').value = n.textAlign;
+            }
+            renderCanvas();
+        }
+
+        function updateSelectedNodeStyle() {
+            if(!selectedNodeId) return;
+            let n = nodes.find(node => node.id === selectedNodeId);
+            if(n) {
+                saveStateToHistory();
+                n.borderColor = document.getElementById('insp-border-color').value;
+                n.borderWidth = document.getElementById('insp-border-width').value;
+                document.getElementById('val-border-width').innerText = n.borderWidth;
+                n.bgColor = document.getElementById('insp-bg-color').value;
+                n.textColor = document.getElementById('insp-text-color').value;
+                n.fontSize = document.getElementById('insp-font-size').value;
+                document.getElementById('val-font-size').innerText = n.fontSize;
+                n.textAlign = document.getElementById('insp-align').value;
+                renderCanvas();
+            }
+        }
+
+        function toggleNodeBold() {
+            if(!selectedNodeId) return;
+            let n = nodes.find(node => node.id === selectedNodeId);
+            if(n) {
+                saveStateToHistory();
+                n.fontWeight = n.fontWeight === 'bold' ? 'normal' : 'bold';
+                renderCanvas();
+            }
+        }
+
+        function updateStickyText(id, val) {
+            let s = stickyNotes.find(note => note.id === id);
+            if(s) { s.text = val; saveAll(); }
+        }
+
+        function deleteSelectedNode() {
+            if(!selectedNodeId) return;
+            saveStateToHistory();
+            nodes = nodes.filter(n => n.id !== selectedNodeId);
+            connections = connections.filter(c => c.from.nodeId !== selectedNodeId && c.to.nodeId !== selectedNodeId);
+            selectedNodeId = null;
+            document.getElementById('inspector-panel').style.display = 'none';
+            renderCanvas();
+        }
+
+        function deleteNodeDirect(id) {
+            saveStateToHistory();
+            nodes = nodes.filter(n => n.id !== id);
+            connections = connections.filter(c => c.from.nodeId !== id && c.to.nodeId !== id);
+            if(selectedNodeId === id) {
+                selectedNodeId = null;
+                document.getElementById('inspector-panel').style.display = 'none';
+            }
+            renderCanvas();
+        }
+
+        function promptDeriveNode(type) {
+            if(!selectedNodeId) return;
+            let parentNode = nodes.find(n => n.id === selectedNodeId);
+            
+            saveStateToHistory();
+            let newId = 'node_' + Date.now();
+            let newNode = {
+                id: newId,
+                x: parentNode.x + 200,
+                y: parentNode.y + 60,
+                text: '',
+                borderColor: parentNode.borderColor,
+                borderWidth: parentNode.borderWidth,
+                bgColor: parentNode.bgColor,
+                textColor: parentNode.textColor,
+                fontSize: parentNode.fontSize,
+                fontWeight: 'normal',
+                textAlign: 'center',
+                imgUrl: '',
+                locked: false
+            };
+            nodes.push(newNode);
+            
+            connections.push({
+                from: { nodeId: parentNode.id, anchor: 'right' },
+                to: { nodeId: newId, anchor: 'left' },
+                type: type
+            });
+
+            selectNode(newId);
+            setTimeout(() => {
+                let box = document.querySelector(`[data-id="${newId}"] textarea`);
+                if(box) { box.focus(); box.select(); }
+            }, 50);
+        }
+
+        function addImgToSelectedNode(e) {
+            if(!selectedNodeId) return;
+            let file = e.target.files[0];
+            if(file) {
+                let reader = new FileReader();
+                reader.onload = function(event) {
+                    saveStateToHistory();
+                    let n = nodes.find(node => node.id === selectedNodeId);
+                    if(n) { n.imgUrl = event.target.result; renderCanvas(); }
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // --- NOTAS Y STICKERS ---
+        function addStickyNote() {
+            saveStateToHistory();
+            let colors = [
+                { bg: '#fef08a', text: '#713f12' },
+                { bg: '#bae6fd', text: '#0369a1' },
+                { bg: '#fecaca', text: '#991b1b' },
+                { bg: '#bbf7d0', text: '#065f46' }
+            ];
+            let col = colors[Math.floor(Math.random() * colors.length)];
+            stickyNotes.push({
+                id: 'sticky_' + Date.now(),
+                x: 150 + (stickyNotes.length * 20) % 250,
+                y: 150 + (stickyNotes.length * 20) % 200,
+                text: '',
+                bgColor: col.bg,
+                textColor: col.text,
+                locked: false
+            });
+            renderCanvas();
+        }
+
+        function deleteSticky(id) {
+            saveStateToHistory();
+            stickyNotes = stickyNotes.filter(s => s.id !== id);
+            renderCanvas();
+        }
+
+        const academicStickers = [
+            '🧠', '📚', '📖', '📝', '📌', '📎', '⚡', '💡', '🔥', '🎯', 
+            '🏆', '🥇', '💻', '⏱️', '⌛', '📅', '🔍', '📊', '📈', '✨', 
+            '☕', '🔬', '🧬', '🧪', '🌡️', '🩺', '❤️', '🩻', '💊', '💉', 
+            '📐', '📏', '✏️', '✒️', '🎒', '🎓', '⚖️', '🏛️', '⚙️', '🛠️', 
+            '🖥️', '⌨️', '📱', '🔋', '📡', '🎨', '🖌️', '🎵', '🎶', '🌍', 
+            '🌐', '💬', '💭', '✅', '❌', '⭐', '🌟', '🌿', '🍎', '📋'
+        ];
+
+        function openStickersModal() {
+            let grid = document.getElementById('stickers-container');
+            grid.innerHTML = '';
+            academicStickers.forEach(emoji => {
+                let div = document.createElement('div');
+                div.className = 'sticker-option';
+                div.innerText = emoji;
+                div.onclick = () => addSticker(emoji);
+                grid.appendChild(div);
+            });
+            document.getElementById('stickers-modal').style.display = 'block';
+        }
+
+        function addSticker(emoji) {
+            saveStateToHistory();
+            stickers.push({
+                id: 'st_' + Date.now(),
+                x: window.innerWidth / 2 + (Math.random() * 100 - 50),
+                y: window.innerHeight / 2 + (Math.random() * 100 - 50),
+                emoji: emoji,
+                size: 2.5,
+                locked: false
+            });
+            renderCanvas();
+            closeModal('stickers-modal');
+        }
+
+        function toggleStickerLock(id) {
+            let st = stickers.find(s => s.id === id);
+            if(st) {
+                st.locked = !st.locked;
+                renderCanvas();
+            }
+        }
+
+        function scaleSticker(id, factor) {
+            let st = stickers.find(s => s.id === id);
+            if(st) {
+                saveStateToHistory();
+                st.size = Math.max(1.5, Math.min(6, (st.size || 2.5) * factor));
+                renderCanvas();
+            }
+        }
+
+        function deleteSticker(id) {
+            saveStateToHistory();
+            stickers = stickers.filter(s => s.id !== id);
+            selectedStickerId = null;
+            renderCanvas();
+        }
+
+        // --- MODO DIBUJO ---
+        function toggleDrawingMode() {
+            isDrawingMode = !isDrawingMode;
+            let toolbar = document.getElementById('drawing-toolbar');
+            let btn = document.getElementById('draw-mode-btn');
+            if(isDrawingMode) {
+                toolbar.style.display = 'flex';
+                drawingCanvas.classList.add('active-drawing');
+                btn.style.background = 'var(--success)';
+            } else {
+                toolbar.style.display = 'none';
+                drawingCanvas.classList.remove('active-drawing');
+                btn.style.background = 'rgba(0,0,0,0.25)';
+            }
+        }
+
+        let drawing = false;
+        drawingCanvas.onmousedown = (e) => {
+            if(!isDrawingMode) return;
+            saveStateToHistory();
+            drawing = true;
+            const rect = drawingCanvas.getBoundingClientRect();
+            ctxDraw.beginPath();
+            ctxDraw.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        };
+        drawingCanvas.ontouchstart = (e) => {
+            if(!isDrawingMode) return;
+            saveStateToHistory();
+            drawing = true;
+            const rect = drawingCanvas.getBoundingClientRect();
+            let c = getClientCoords(e);
+            ctxDraw.beginPath();
+            ctxDraw.moveTo(c.clientX - rect.left, c.clientY - rect.top);
+        };
+
+        drawingCanvas.onmousemove = (e) => {
+            if(!drawing || !isDrawingMode) return;
+            const rect = drawingCanvas.getBoundingClientRect();
+            let tool = document.getElementById('draw-tool').value;
+            let color = document.getElementById('pen-color').value;
+            let size = document.getElementById('pen-size').value;
+
+            ctxDraw.lineWidth = size;
+            ctxDraw.lineCap = 'round';
+            if(tool === 'eraser') {
+                ctxDraw.globalCompositeOperation = 'destination-out';
+                ctxDraw.lineWidth = size * 3;
+            } else {
+                ctxDraw.globalCompositeOperation = 'source-over';
+                ctxDraw.strokeStyle = color;
+            }
+            ctxDraw.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctxDraw.stroke();
+        };
+        drawingCanvas.ontouchmove = (e) => {
+            if(!drawing || !isDrawingMode) return;
+            const rect = drawingCanvas.getBoundingClientRect();
+            let c = getClientCoords(e);
+            let tool = document.getElementById('draw-tool').value;
+            let color = document.getElementById('pen-color').value;
+            let size = document.getElementById('pen-size').value;
+
+            ctxDraw.lineWidth = size;
+            ctxDraw.lineCap = 'round';
+            if(tool === 'eraser') {
+                ctxDraw.globalCompositeOperation = 'destination-out';
+                ctxDraw.lineWidth = size * 3;
+            } else {
+                ctxDraw.globalCompositeOperation = 'source-over';
+                ctxDraw.strokeStyle = color;
+            }
+            ctxDraw.lineTo(c.clientX - rect.left, c.clientY - rect.top);
+            ctxDraw.stroke();
+        };
+
+        window.onmouseup = () => { if(drawing) { drawing = false; saveAll(); } };
+        window.ontouchend = () => { if(drawing) { drawing = false; saveAll(); } };
+
+        function clearDrawingCanvas() {
+            saveStateToHistory();
+            ctxDraw.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            saveAll();
+        }
+
+        // --- TEMAS Y FONDO ---
+        function openBgSettings() { document.getElementById('bg-settings-modal').style.display = 'block'; }
+        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+        function setCanvasBackground(e) {
+            let file = e.target.files[0];
+            if(file) {
+                let reader = new FileReader();
+                reader.onload = function(event) {
+                    saveStateToHistory();
+                    bgImgData = event.target.result;
+                    localStorage.setItem('konekt_bg', bgImgData);
+                    document.getElementById('bg-image-layer').style.backgroundImage = `url(${bgImgData})`;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeCanvasBackground() {
+            saveStateToHistory();
+            bgImgData = '';
+            localStorage.removeItem('konekt_bg');
+            document.getElementById('bg-image-layer').style.backgroundImage = 'none';
+        }
+
+        function updateBgWhiteness(val) {
+            bgWhitenessVal = val / 100;
+            document.getElementById('val-bg-whiteness').innerText = val;
+            document.getElementById('bg-color-filter').style.opacity = bgWhitenessVal;
+            localStorage.setItem('konekt_bg_white', bgWhitenessVal);
+        }
+
+        function exportToImage() {
+            document.getElementById('inspector-panel').style.display = 'none';
+            html2canvas(document.getElementById('canvas-container'), { useCORS: true }).then(canvas => {
+                let link = document.createElement('a');
+                link.download = 'KonektPro_MapaSinoptico.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        }
+
+        function clearCanvas() {
+            if(confirm("¿Estás seguro de borrar todo el mapa conceptual?")) {
+                saveStateToHistory();
+                nodes = []; stickyNotes = []; connections = []; stickers = [];
+                ctxDraw.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                renderCanvas();
+            }
+        }
+
+        renderCanvas();
+    </script>
+</body>
+</html>
